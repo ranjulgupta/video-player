@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Back-to-Back Player</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --panel: #ffffff; --fg: #1b1e24; --muted: #5d6573;
+    --accent: #2f5bd3; --line: #dde1e8;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121419; --panel: #1b1e25; --fg: #e8eaee; --muted: #9aa2b1;
+            --accent: #7c9cf0; --line: #2c313b; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; display: grid; gap: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  .stage { position: relative; aspect-ratio: 16 / 9; width: 100%; max-width: 100%;
+           background: #000; border-radius: 8px; overflow: hidden; }
+  #player, .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .queue { display: grid; gap: 8px; }
+  .item { display: flex; gap: 12px; align-items: center; padding: 10px 12px;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .item.now { border-color: var(--accent); }
+  .num { font-variant-numeric: tabular-nums; color: var(--muted); width: 1.5em; }
+  .item.now .num { color: var(--accent); font-weight: 600; }
+  .item .label { flex: 1; min-width: 0; }
+  .item .range { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .note { color: var(--muted); font-size: 13px; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Back-to-Back Player</h1>
+  <div class="stage"><div id="player"></div></div>
+  <div class="controls">
+    <button id="play1" type="button">Restart from video 1</button>
+    <button id="play2" type="button">Skip to video 2</button>
+  </div>
+  <div class="queue">
+    <div class="item" id="q0"><span class="num">1</span>
+      <span class="label">First video</span><span class="range">0:00 – 9:05</span></div>
+    <div class="item" id="q1"><span class="num">2</span>
+      <span class="label">Second video</span><span class="range">full length</span></div>
+  </div>
+  <p class="note">Video 1 stops at 9:05 and video 2 starts on its own.</p>
+</main>
+
+<script>
+  // The two segments, in order. end: null means play to the end.
+  const SEGMENTS = [
+    { id: "fIcvTHkJggY", start: 0, end: 545 },   // 9:05 = 545 s
+    { id: "BizApwPSRKY", start: 0, end: null }
+  ];
+  let player, current = 0, poll;
+
+  function mark() {
+    SEGMENTS.forEach((_, i) =>
+      document.getElementById("q" + i).classList.toggle("now", i === current));
+  }
+
+  function playSegment(i) {
+    current = i; mark();
+    const s = SEGMENTS[i];
+    const opts = { videoId: s.id, startSeconds: s.start };
+    if (s.end !== null) opts.endSeconds = s.end;
+    player.loadVideoById(opts);
+  }
+
+  function next() {
+    if (current < SEGMENTS.length - 1) playSegment(current + 1);
+  }
+
+  window.onYouTubeIframeAPIReady = function () {
+    player = new YT.Player("player", {
+      videoId: SEGMENTS[0].id,
+      playerVars: { start: SEGMENTS[0].start, end: SEGMENTS[0].end, rel: 0, playsinline: 1 },
+      events: {
+        onReady: mark,
+        onStateChange: e => { if (e.data === YT.PlayerState.ENDED) next(); }
+      }
+    });
+    // Backup in case the end-time event doesn't fire (e.g. after seeking).
+    poll = setInterval(() => {
+      const s = SEGMENTS[current];
+      if (!player || !player.getCurrentTime || s.end === null) return;
+      if (player.getPlayerState() === YT.PlayerState.PLAYING &&
+          player.getCurrentTime() >= s.end - 0.25) next();
+    }, 500);
+  };
+
+  document.getElementById("play1").onclick = () => player && playSegment(0);
+  document.getElementById("play2").onclick = () => player && playSegment(1);
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
